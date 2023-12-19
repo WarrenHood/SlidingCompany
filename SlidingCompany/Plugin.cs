@@ -1,6 +1,7 @@
 ﻿using BepInEx;
+using UnityEngine;
 
-namespace LethalCompanyTemplate
+namespace SlidingCompany
 {
     [BepInPlugin(PluginInfo.PLUGIN_GUID, PluginInfo.PLUGIN_NAME, PluginInfo.PLUGIN_VERSION)]
     public class Plugin : BaseUnityPlugin
