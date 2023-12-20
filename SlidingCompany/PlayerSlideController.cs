@@ -23,6 +23,7 @@ namespace SlidingCompany
         bool isCrouching = false;
         PhysicMaterial originalMaterial = null;
         PhysicMaterial slideMaterial = null;
+        Vector3 lastSlideDirection = Vector3.zero;
 
         void Start () {
             originalMaterial = playerController.thisController.material;
@@ -152,7 +153,7 @@ namespace SlidingCompany
             if (isJumping || !playerController.thisController.isGrounded) {
                 // If we are jumping or not grounded, keep applying slide velocity
                 // otherwise we have an abrupt loss of velocity when slide jumping
-                playerController.thisController.Move(playerController.thisPlayerBody.transform.forward * slideSpeed * Time.fixedDeltaTime);
+                playerController.thisController.Move(lastSlideDirection * slideSpeed * Time.fixedDeltaTime);
             }
 
             if (!isSliding && !isCrouching) {
@@ -168,7 +169,7 @@ namespace SlidingCompany
             if (playerController.thisController.isGrounded && isSliding) {
                 Physics.Raycast(floorRay, out hit, 20.0f, playerController.playersManager.allPlayersCollideWithMask, QueryTriggerInteraction.Ignore);
                 slideDirection = Vector3.ProjectOnPlane(slideDirection, hit.normal).normalized;
-
+                lastSlideDirection = new Vector3(slideDirection.x, slideDirection.y, slideDirection.z);
                 // Add speed based on the steepness of the slope
                 float steepness = -Vector3.Dot(slideDirection, Vector3.up);
                 slideSpeed += steepness * gravity * playerController.carryWeight * Time.fixedDeltaTime;
