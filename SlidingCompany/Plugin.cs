@@ -42,6 +42,12 @@ namespace SlidingCompany
                 return false;
             }
             __instance.Crouch(!__instance.isCrouching);
+            __instance.playerBodyAnimator.SetBool("Jumping", false);
+
+            // Disable sprinting for now
+            if (__instance.isCrouching) {
+                IngamePlayerSettings.Instance.playerInput.actions.FindAction("Sprint", false).Disable();
+            }
 
             // Skip the original Crouch_performed
             return false;
@@ -86,11 +92,9 @@ namespace SlidingCompany
                 ___isJumping = true;
 
                 // Uncrouch if we are crouching
-                if (__instance.isCrouching) {
-                    __instance.isCrouching = false;
-                    __instance.playerBodyAnimator.SetBool("crouching", false);
-                }
-                
+                __instance.isCrouching = false;
+                __instance.playerBodyAnimator.SetBool("Crouching", false);
+
                 __instance.sprintMeter = Mathf.Clamp(__instance.sprintMeter - 0.08f, 0f, 1f);
                 __instance.movementAudio.PlayOneShot(StartOfRound.Instance.playerJumpSFX);
                 if (___jumpCoroutine != null) {

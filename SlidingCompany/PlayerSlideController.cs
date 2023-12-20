@@ -1,4 +1,5 @@
-﻿using GameNetcodeStuff;
+﻿using System.Reflection;
+using GameNetcodeStuff;
 using UnityEngine;
 
 namespace SlidingCompany
@@ -8,9 +9,10 @@ namespace SlidingCompany
         public float slideSpeed = 0f;
         public float initialSlideSpeedBoost = 15.0f;
         public float slideFriction = 0.1f;
-        public float friction = 0.95f;
-        const float gravity = 30.0f;
+        public float friction = 0.97f;
+        const float gravity = 150.0f;
         const float initialSlideStaminaCost = 0.08f;
+        const float slideStaminaDrain = 0.002f;
         bool isSliding = false;
         bool isCrouching = false;
         PhysicMaterial originalMaterial = null;
@@ -24,14 +26,26 @@ namespace SlidingCompany
         }
 
         void FixedUpdate() {
+            bool isJumping = (bool) typeof(PlayerControllerB).GetField("isJumping", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(playerController);
+
+            if (playerController.isCrouching) {
+                // Ensure we are in our crouching animation, even after crouching mid-air
+                playerController.playerBodyAnimator.SetBool("crouching", true);
+            }
+            else {
+                playerController.playerBodyAnimator.SetBool("crouching", false);
+            }
+
+            if (isJumping) {
+                playerController.playerBodyAnimator.SetBool("Jumping", true);
+            }
+            else {
+                playerController.playerBodyAnimator.SetBool("Jumping", false);
+            }
+
             if (!isCrouching) {
                 // If we aren't already crouching
                 isCrouching = playerController.isCrouching;
-
-                // Ensure we are in our crouching animation, even after crouching mid-air
-                if (isCrouching) {
-                    playerController.playerBodyAnimator.SetBool("crouching", true);
-                }
 
                 // If we were already moving in some direction beforehand, we can start sliding if not exhausted
                 isSliding = !playerController.isExhausted && playerController.sprintMeter >= initialSlideStaminaCost && isCrouching && playerController.thisController.velocity.magnitude > 0;
@@ -57,8 +71,21 @@ namespace SlidingCompany
                 }
             }
 
+            // Apply some friction
+            slideSpeed *= friction;
+            if (slideSpeed < 0.1) {
+                slideSpeed = 0f;
+                // TODO: Stop playing sliding audio if it is playing
+            }
+
+            if (isJumping || !playerController.thisController.isGrounded) {
+                // If we are jumping or not grounded, keep applying slide velocity
+                // otherwise we have an abrupt loss of velocity when slide jumping
+                playerController.thisController.Move(playerController.thisPlayerBody.transform.forward * slideSpeed * Time.fixedDeltaTime);
+            }
 
             if (!isSliding && !isCrouching) {
+                IngamePlayerSettings.Instance.playerInput.actions.FindAction("Sprint", false).Enable();
                 // TODO: Stop playing sliding audio
 
                 if (playerController.thisController.material != originalMaterial) {
@@ -74,9 +101,6 @@ namespace SlidingCompany
 
             // If we are crouching on a slope, start sliding
             if (playerController.thisController.isGrounded) {
-                // Apply some friction
-                slideSpeed *= friction;
-
                 Physics.Raycast(floorRay, out hit, 20.0f, playerController.playersManager.allPlayersCollideWithMask, QueryTriggerInteraction.Ignore);
                 if (!isSliding) {
                     // Carry over any existing velocity into the slide
@@ -95,20 +119,27 @@ namespace SlidingCompany
                 }
             }
             else {
-                slideSpeed = 0f;
                 isSliding = false;
             }
 
-            if (isSliding) {
-                // Slide in some direction
 
+            // Setup slide materials
+            if (isSliding && slideSpeed > 0f) {
+                // Slide in some direction
+                IngamePlayerSettings.Instance.playerInput.actions.FindAction("Sprint", false).Disable();
                 playerController.thisController.material = slideMaterial;
                 playerController.thisController.Move(slideDirection * slideSpeed * Time.fixedDeltaTime);
+
+                // Consume some stamina while sliding
+                playerController.sprintMeter = Mathf.Clamp(playerController.sprintMeter - slideStaminaDrain, 0f, 1f);
             }
             else {
                 if (playerController.thisController.material != originalMaterial) {
                     // Reset the material to the original
                     playerController.thisController.material = originalMaterial;
+
+                    // Enable sprinting now that our slide has basically ended
+                    IngamePlayerSettings.Instance.playerInput.actions.FindAction("Sprint", false).Enable();
                 }
             }
         }
