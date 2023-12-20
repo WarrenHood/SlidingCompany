@@ -12,7 +12,7 @@ namespace SlidingCompany
         public float slideFriction = 0.1f;
         public float friction = 0.97f;
         public float airFriction = 0.99f;
-        const float gravity = 9.8f;
+        const float gravity = 50f;
         const float initialSlideStaminaCost = 0.08f;
         const float carriedItemWeightMultiplier = 2.0f;
         // const float slideStaminaDrain = 0.0015f;
@@ -125,7 +125,6 @@ namespace SlidingCompany
                 else if (isSliding) {
                     // If we weren't grounded, we can queue a slide for when we land by setting isCrouching to false
                     isCrouching = false;
-                    isSliding = false;
                 }
             }
             else {
@@ -146,7 +145,7 @@ namespace SlidingCompany
 
             // Apply some friction
             slideSpeed *= getFriction();
-            if (slideSpeed <= stopSlideSpeed) {
+            if (Mathf.Abs(slideSpeed) <= stopSlideSpeed) {
                 slideSpeed = 0f;
             }
 
@@ -173,15 +172,12 @@ namespace SlidingCompany
                 // Add speed based on the steepness of the slope
                 float steepness = -Vector3.Dot(slideDirection, Vector3.up);
                 slideSpeed += steepness * gravity * playerController.carryWeight * Time.fixedDeltaTime;
-                if (slideSpeed <= stopSlideSpeed) {
+                if (Mathf.Abs(slideSpeed) <= stopSlideSpeed) {
                     slideSpeed = 0f;
                 }
             }
-            else {
-                isSliding = false;
-            }
 
-            if (isSliding && slideSpeed > 0f) {
+            if (isSliding && Mathf.Abs(slideSpeed) >= stopSlideSpeed) {
                 this.SlideUpdate(slideDirection);
             }
             else {
