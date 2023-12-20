@@ -11,8 +11,10 @@ namespace SlidingCompany
         public float initialSlideSpeedBoost = 15.0f;
         public float slideFriction = 0.1f;
         public float friction = 0.97f;
-        const float gravity = 150.0f;
+        public float airFriction = 0.99f;
+        const float gravity = 9.8f;
         const float initialSlideStaminaCost = 0.08f;
+        const float carriedItemWeightMultiplier = 2.0f;
         // const float slideStaminaDrain = 0.0015f;
         const float slideStaminaDrain = 0.0f;
         // The smallest slide speed allowed before we stop the slide
@@ -35,7 +37,7 @@ namespace SlidingCompany
             playerController.playerBodyAnimator.SetBool("Sprinting", false);
             playerController.playerBodyAnimator.SetBool("Jumping", false);
             playerController.playerBodyAnimator.SetBool("crouching", true);
-            
+
             // TODO: Fix animation issue where we sometimes are standing while slanding
         }
 
@@ -91,6 +93,18 @@ namespace SlidingCompany
             FixAnimations();
         }
 
+        float getWeightMultiplier() {
+            float additionalWeight = playerController.carryWeight - 1.0f;
+            return 1.0f + additionalWeight * carriedItemWeightMultiplier;
+        }
+
+        float getFriction() {
+            if (playerController.thisController.isGrounded) {
+                return friction;
+            }
+            return airFriction;
+        }
+
         void FixedUpdate() {
             bool isJumping = (bool) typeof(PlayerControllerB).GetField("isJumping", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(playerController);
             bool wasSliding = isSliding;
@@ -100,15 +114,13 @@ namespace SlidingCompany
                 isCrouching = playerController.isCrouching;
 
                 // If we were already moving in some direction beforehand, we can start sliding if not exhausted
-                isSliding = !playerController.isExhausted && playerController.sprintMeter >= initialSlideStaminaCost && isCrouching && playerController.thisController.velocity.magnitude > 0;
+                isSliding = !playerController.isExhausted && playerController.sprintMeter >= initialSlideStaminaCost * getWeightMultiplier() && isCrouching && playerController.thisController.velocity.magnitude > 0;
                 if (isSliding && playerController.thisController.isGrounded) {
                     // Carry over any existing velocity into the slide
-                    slideSpeed = playerController.thisController.velocity.magnitude + initialSlideSpeedBoost;
+                    slideSpeed = playerController.thisController.velocity.magnitude + initialSlideSpeedBoost / getWeightMultiplier();
 
                     // Let's also use a bit of stamina since we gave a small speed boost
-                    playerController.sprintMeter = Mathf.Clamp(playerController.sprintMeter - initialSlideStaminaCost, 0f, 1f);
-
-                    // TODO: Begin playing slide audio
+                    playerController.sprintMeter = Mathf.Clamp(playerController.sprintMeter - initialSlideStaminaCost * getWeightMultiplier(), 0f, 1f);
                 }
                 else if (isSliding) {
                     // If we weren't grounded, we can queue a slide for when we land by setting isCrouching to false
@@ -133,7 +145,7 @@ namespace SlidingCompany
             }
 
             // Apply some friction
-            slideSpeed *= friction;
+            slideSpeed *= getFriction();
             if (slideSpeed <= stopSlideSpeed) {
                 slideSpeed = 0f;
             }
@@ -160,7 +172,7 @@ namespace SlidingCompany
 
                 // Add speed based on the steepness of the slope
                 float steepness = -Vector3.Dot(slideDirection, Vector3.up);
-                slideSpeed += steepness * gravity * Time.fixedDeltaTime;
+                slideSpeed += steepness * gravity * playerController.carryWeight * Time.fixedDeltaTime;
                 if (slideSpeed <= stopSlideSpeed) {
                     slideSpeed = 0f;
                 }
