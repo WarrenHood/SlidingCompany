@@ -71,3 +71,4 @@ crashlytics-build.properties
 # bin and obj folders
 /SlidingCompany/bin/
 /SlidingCompany/obj/
+/SlidingCompany/lib/
