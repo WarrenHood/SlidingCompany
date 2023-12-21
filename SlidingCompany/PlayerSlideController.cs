@@ -1,7 +1,10 @@
-﻿using System.Reflection;
+﻿using System.IO;
+using System.Reflection;
+using System.Threading.Tasks;
+using BepInEx;
 using GameNetcodeStuff;
 using UnityEngine;
-using UnityEngine.UIElements;
+using UnityEngine.Networking;
 
 namespace SlidingCompany
 {
@@ -12,6 +15,8 @@ namespace SlidingCompany
         public float slideFriction = 0.1f;
         public float friction = 0.97f;
         public float airFriction = 0.99f;
+        // The maximum angle change before we stop hugging the terrain
+        public float maxSlideAngleChange = 30f;
         const float gravity = 50f;
         const float initialSlideStaminaCost = 0.08f;
         const float carriedItemWeightMultiplier = 2.0f;
@@ -24,12 +29,51 @@ namespace SlidingCompany
         PhysicMaterial originalMaterial = null;
         PhysicMaterial slideMaterial = null;
         Vector3 lastSlideDirection = Vector3.zero;
+        AudioSource slidingAudio = null;
 
-        void Start () {
+        private static async Task<AudioClip> GetAudioClip(string filePath, AudioType fileType) {
+
+            using (UnityWebRequest www = UnityWebRequestMultimedia.GetAudioClip(filePath, fileType)) {
+                var result = www.SendWebRequest();
+
+                while (!result.isDone) { await Task.Delay(100); }
+
+                if (www.result == UnityWebRequest.Result.ConnectionError) {
+                    Debug.Log(www.error);
+                    return null;
+                }
+                else {
+                    return DownloadHandlerAudioClip.GetContent(www);
+                }
+            }
+        }
+
+        async void Start () {
             originalMaterial = playerController.thisController.material;
             slideMaterial = new PhysicMaterial("PlayerSlideMaterial");
             slideMaterial.staticFriction = slideFriction;
             slideMaterial.dynamicFriction = slideFriction;
+            // Hardcoding undefined-SlidingCompany for now
+            string slidingSoundPath = Path.Combine(Paths.PluginPath, "undefined-SlidingCompany", "SlidingCompany", "concrete.wav");
+            Debug.Log("Attempting to load concrete audio source at: " + slidingSoundPath);
+            AudioClip slidingSound = await GetAudioClip(slidingSoundPath, AudioType.WAV);
+            if (slidingSound != null ) {
+                Debug.Log("Loaded concrete audio clip.");
+                Debug.Log("Loaded concrete audio data status: " + slidingSound.LoadAudioData());
+                slidingAudio = playerController.thisController.gameObject.AddComponent<AudioSource>();
+                if (slidingAudio != null) {
+                    Debug.Log("Successfully attached an AudioSource to player gameobject");
+                    slidingAudio.clip = slidingSound;
+                    slidingAudio.playOnAwake = false;
+                    slidingAudio.loop = true;
+                }
+                else {
+                    Debug.Log("Failed to attach an AudioSource to player gameobject");
+                }
+            }
+            else {
+                Debug.Log("Failed to load concrete audio clip");
+            }
         }
 
         void OnSlideStart() {
@@ -55,11 +99,29 @@ namespace SlidingCompany
             playerController.thisController.Move(slideDirection * slideSpeed * Time.fixedDeltaTime);
 
             // Consume some stamina while sliding
-            playerController.sprintMeter = Mathf.Clamp(playerController.sprintMeter - slideStaminaDrain, 0f, 1f);
+            playerController.sprintMeter = Mathf.Clamp(playerController.sprintMeter - slideStaminaDrain, 0f, 1f);           
+        }
+
+        void UpdateSlideAudio() {
+            if (slidingAudio != null) {
+                if (isSliding) {
+                    if (!slidingAudio.isPlaying) {
+                        slidingAudio.Play();
+                    }
+                }
+                else {
+                    if (slidingAudio.isPlaying) {
+                        slidingAudio.Stop();
+                    }
+                }
+            }
         }
 
         void OnSlideEnd() {
             isSliding = false;
+            if (slidingAudio != null && slidingAudio.isPlaying) {
+                slidingAudio.Stop();
+            }
 
             // Reset the material to the original
             playerController.thisController.material = originalMaterial;
@@ -115,13 +177,20 @@ namespace SlidingCompany
                 isCrouching = playerController.isCrouching;
 
                 // If we were already moving in some direction beforehand, we can start sliding if not exhausted
-                isSliding = !playerController.isExhausted && playerController.sprintMeter >= initialSlideStaminaCost * getWeightMultiplier() && isCrouching && playerController.thisController.velocity.magnitude > 0;
+                isSliding = !playerController.isExhausted
+                    && !playerController.isPlayerDead
+                    && playerController.sprintMeter >= initialSlideStaminaCost * getWeightMultiplier() 
+                    && isCrouching 
+                    && playerController.thisController.velocity.magnitude > 0;
                 if (isSliding && playerController.thisController.isGrounded) {
                     // Carry over any existing velocity into the slide
                     slideSpeed = playerController.thisController.velocity.magnitude + initialSlideSpeedBoost / getWeightMultiplier();
 
                     // Let's also use a bit of stamina since we gave a small speed boost
                     playerController.sprintMeter = Mathf.Clamp(playerController.sprintMeter - initialSlideStaminaCost * getWeightMultiplier(), 0f, 1f);
+
+                    // Set the slide direction to nothing since we just started sliding
+                    lastSlideDirection = Vector3.zero;
                 }
                 else if (isSliding) {
                     // If we weren't grounded, we can queue a slide for when we land by setting isCrouching to false
@@ -134,6 +203,12 @@ namespace SlidingCompany
                     isCrouching = false;
                     isSliding = false;
                 }
+            }
+
+            if (playerController.isPlayerDead) {
+                // Dead players can't slide
+                isSliding = false;
+                isCrouching = false;
             }
 
             if (wasSliding && !isSliding) {
@@ -161,21 +236,38 @@ namespace SlidingCompany
                 return;
             }
 
+            UpdateSlideAudio();
+
             RaycastHit hit;
             Ray floorRay = new Ray(playerController.gameplayCamera.transform.position, Vector3.down);
-            Vector3 slideDirection = playerController.gameplayCamera.transform.forward;
+            Vector3 slideDirection = playerController.gameplayCamera.transform.forward.normalized;
 
-            // If we are sliding while on a slope, let's slide in the correct direction
+            // Handle slopes
             if (playerController.thisController.isGrounded && isSliding) {
                 Physics.Raycast(floorRay, out hit, 20.0f, playerController.playersManager.allPlayersCollideWithMask, QueryTriggerInteraction.Ignore);
                 slideDirection = Vector3.ProjectOnPlane(slideDirection, hit.normal).normalized;
-                lastSlideDirection = new Vector3(slideDirection.x, slideDirection.y, slideDirection.z);
                 // Add speed based on the steepness of the slope
                 float steepness = -Vector3.Dot(slideDirection, Vector3.up);
+
+                /*
+                 * TODO: Finish implementing this
+                // Check if the change in slide direction is greater than some threshold
+                if (lastSlideDirection.magnitude > 0f) {
+                    float angleChange = Vector3.Angle(lastSlideDirection, slideDirection);
+                    if (angleChange > maxSlideAngleChange && slideDirection.y < lastSlideDirection.y) {
+                        Debug.Log("Current angle change: " + angleChange + ", previous y=" + lastSlideDirection.y + ", current y=" + slideDirection.y);
+                        // We are moving down a very steep hill, so keep our last velocity.
+                        // This should allow us to take ramps
+                        slideDirection = lastSlideDirection;
+                        steepness = 0f;
+                    }
+                }*/
+
                 slideSpeed += steepness * gravity * playerController.carryWeight * Time.fixedDeltaTime;
                 if (Mathf.Abs(slideSpeed) <= stopSlideSpeed) {
                     slideSpeed = 0f;
                 }
+                lastSlideDirection = new Vector3(slideDirection.x, slideDirection.y, slideDirection.z);
             }
 
             if (isSliding && Mathf.Abs(slideSpeed) >= stopSlideSpeed) {
