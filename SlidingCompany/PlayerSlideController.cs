@@ -151,11 +151,21 @@ namespace SlidingCompany
                 playerController.playerBodyAnimator.SetBool("crouching", true);
             }
         }
-
-        void Update() {
-            FixAnimations();
+        bool ShouldUpdate() {
+            // This is required to stop other players vibrating/shaking
+            if (
+                (!playerController.IsOwner || !playerController.isPlayerControlled || (playerController.IsServer && !playerController.isHostPlayerObject))
+                && !playerController.isTestingPlayer
+            ) {
+                return false;
+            }
+            return true;
         }
-
+        void Update() {
+            if (ShouldUpdate()) {
+                FixAnimations();
+            }
+        }
         float getWeightMultiplier() {
             float additionalWeight = playerController.carryWeight - 1.0f;
             return 1.0f + additionalWeight * carriedItemWeightMultiplier;
@@ -169,6 +179,9 @@ namespace SlidingCompany
         }
 
         void FixedUpdate() {
+            if (!ShouldUpdate()) {
+                return;
+            }
             bool isJumping = (bool) typeof(PlayerControllerB).GetField("isJumping", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(playerController);
             bool wasSliding = isSliding;
 
