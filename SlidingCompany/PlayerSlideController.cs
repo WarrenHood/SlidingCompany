@@ -26,6 +26,7 @@ namespace SlidingCompany
         const float stopSlideSpeed = 0.5f;
         bool isSliding = false;
         bool isCrouching = false;
+        bool isClimbing = false;
         PhysicMaterial originalMaterial = null;
         PhysicMaterial slideMaterial = null;
         Vector3 lastSlideDirection = Vector3.zero;
@@ -184,6 +185,7 @@ namespace SlidingCompany
             }
             bool isJumping = (bool) typeof(PlayerControllerB).GetField("isJumping", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(playerController);
             bool wasSliding = isSliding;
+            isClimbing = playerController.isClimbingLadder;
 
             if (!isCrouching) {
                 // If we aren't already crouching
@@ -222,6 +224,15 @@ namespace SlidingCompany
                 // Dead players can't slide
                 isSliding = false;
                 isCrouching = false;
+                isJumping = false;
+                isClimbing = false;
+            }
+
+            if (isClimbing)
+            {
+                isSliding = false;
+                isCrouching = false;
+                isJumping = false;
             }
 
             if (wasSliding && !isSliding) {
@@ -238,7 +249,7 @@ namespace SlidingCompany
                 slideSpeed = 0f;
             }
 
-            if (isJumping || !playerController.thisController.isGrounded) {
+            if ((isJumping || !playerController.thisController.isGrounded) && !isClimbing) {
                 // If we are jumping or not grounded, keep applying slide velocity
                 // otherwise we have an abrupt loss of velocity when slide jumping
                 playerController.thisController.Move(lastSlideDirection * slideSpeed * Time.fixedDeltaTime);
