@@ -11,6 +11,7 @@ namespace SlidingCompany
     [BepInPlugin(PluginInfo.PLUGIN_GUID, PluginInfo.PLUGIN_NAME, PluginInfo.PLUGIN_VERSION)]
     public class Plugin : BaseUnityPlugin
     {
+        static PlayerSlideController slideController = null;
         private void Awake()
         {
             // Plugin startup logic
@@ -18,11 +19,19 @@ namespace SlidingCompany
             Harmony.CreateAndPatchAll(typeof(Plugin));
         }
 
+        [HarmonyPatch(typeof(GameNetcodeStuff.PlayerControllerB), "KillPlayer")]
+        [HarmonyPostfix]
+        private static void Postfix(GameNetcodeStuff.PlayerControllerB __instance)
+        {
+            AudioSource slidingAudio = (AudioSource)typeof(PlayerSlideController).GetField("slidingAudio", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(slideController);
+            slidingAudio.Stop();
+        }
+
         [HarmonyPatch(typeof(GameNetcodeStuff.PlayerControllerB), "Start")]
         [HarmonyPostfix]
         static void AttachPlayerSlideScript(GameNetcodeStuff.PlayerControllerB __instance) {
             // Attaches the PlayerSlideController component to this gameobject
-            PlayerSlideController slideController = __instance.thisPlayerBody.gameObject.AddComponent<PlayerSlideController>();
+            slideController = __instance.thisPlayerBody.gameObject.AddComponent<PlayerSlideController>();
             slideController.playerController = __instance;
         }
 
