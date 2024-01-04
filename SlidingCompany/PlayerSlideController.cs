@@ -224,10 +224,11 @@ namespace SlidingCompany
                 }
             }
 
-            if (playerController.isPlayerDead) {
-                // Dead players can't slide
+            if (playerController.isPlayerDead || playerController.isClimbingLadder) {
+                // Dead/climbing players can't slide
                 isSliding = false;
                 isCrouching = false;
+                slideSpeed = 0f;
             }
 
             if (wasSliding && !isSliding) {
