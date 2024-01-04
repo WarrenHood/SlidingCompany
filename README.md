@@ -6,3 +6,12 @@ Note: This mod currently causes desync in multiplayer. I will work on fixing thi
 - You can now crouch-slide (uses stamina - the heavier you are the more stamina this will cost)
 - You can now queue up a crouch or slide while in the air/jumping
 - You can now jump while crouching or sliding
+
+Changelog:
+
+1.0.7:
+
+### Fix
+
+- Stopped sliding audio for dead players
+- Stop sliding once we start climbing a ladder
