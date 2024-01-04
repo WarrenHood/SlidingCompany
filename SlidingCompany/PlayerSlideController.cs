@@ -162,6 +162,12 @@ namespace SlidingCompany
             return true;
         }
         void Update() {
+            if (playerController.isPlayerDead) {
+                isSliding = false;
+                isCrouching = false;
+            }
+            UpdateSlideAudio();
+
             if (ShouldUpdate()) {
                 FixAnimations();
             }
