@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Threading.Tasks;
 using BepInEx;
 using GameNetcodeStuff;
+using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.Networking;
 
@@ -11,7 +12,8 @@ namespace SlidingCompany
     public class PlayerSlideController: MonoBehaviour {
         public PlayerControllerB playerController = null;
         public float slideSpeed = 0f;
-        public float initialSlideSpeedBoost = 15.0f;
+        // TODO: Change initialSlideSpeedBoost back to 15.0f
+        public float initialSlideSpeedBoost = 2.0f;
         public float slideFriction = 0.1f;
         public float friction = 0.97f;
         public float airFriction = 0.99f;
@@ -66,6 +68,7 @@ namespace SlidingCompany
                     slidingAudio.clip = slidingSound;
                     slidingAudio.playOnAwake = false;
                     slidingAudio.loop = true;
+                    slidingAudio.volume = 0.15f;
                 }
                 else {
                     Debug.Log("Failed to attach an AudioSource to player gameobject");
@@ -73,6 +76,20 @@ namespace SlidingCompany
             }
             else {
                 Debug.Log("Failed to load concrete audio clip");
+            }
+        }
+
+        [ClientRpc]
+        void PlaySlidingSoundClientRpc() {
+            if (slidingAudio != null) {
+                slidingAudio.Play();
+            }
+        }
+
+        [ClientRpc]
+        void StopSlidingSoundClientRpc() {
+            if (slidingAudio != null) {
+                slidingAudio.Stop();
             }
         }
 
@@ -106,12 +123,12 @@ namespace SlidingCompany
             if (slidingAudio != null) {
                 if (isSliding) {
                     if (!slidingAudio.isPlaying) {
-                        slidingAudio.Play();
+                        PlaySlidingSoundClientRpc();
                     }
                 }
                 else {
                     if (slidingAudio.isPlaying) {
-                        slidingAudio.Stop();
+                        StopSlidingSoundClientRpc();
                     }
                 }
             }
@@ -120,7 +137,7 @@ namespace SlidingCompany
         void OnSlideEnd() {
             isSliding = false;
             if (slidingAudio != null && slidingAudio.isPlaying) {
-                slidingAudio.Stop();
+                StopSlidingSoundClientRpc();
             }
 
             // Reset the material to the original
@@ -217,10 +234,15 @@ namespace SlidingCompany
                 }
             }
             else {
-                if (!playerController.isCrouching) {
-                    // We were previously crouched, but now we aren't
+                if (!playerController.isCrouching && !playerController.isSprinting) {
+                    // We were previously crouched, but now we aren't. So stop crouching
                     isCrouching = false;
                     isSliding = false;
+                }
+                else if (wasSliding) {
+                    // Force the player to keep crouching if they are sliding
+                    playerController.isCrouching = true;
+                    isCrouching = true;
                 }
             }
 
